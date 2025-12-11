@@ -31,10 +31,19 @@
     (pad "" np_thru_hole circle (at 2.54 5.08) (size 1.7 1.7) (drill 1.7) (layers *.Cu *.Mask))
     (pad "" np_thru_hole circle (at -7.62 5.08) (size 1.7 1.7) (drill 1.7) (layers *.Cu *.Mask))
     (pad "" np_thru_hole circle (at -2.54 5.08) (size 4 4) (drill 4) (layers *.Cu *.Mask))
+{% if not hotswap %}
     (pad 2 thru_hole circle (at -6.35 2.54) (size 2.2 2.2) (drill 1.5) (layers *.Cu *.Mask)
       (net {{diodenetnum}} {{diodenetname}}))
     (pad 1 thru_hole circle (at 0 0) (size 2.2 2.2) (drill 1.5) (layers *.Cu *.Mask)
       (net {{colnetnum}} {{colnetname}}))
+{% else %}
+    (pad 2 smd rect (at -9.9 2.54) (size 2.55 2.5) (layers B.Cu B.Paste B.Mask)
+      (net {{diodenetnum}} {{diodenetname}}))
+    (pad "" np_thru_hole circle (at -6.35 2.54) (size 3.2 3.2) (drill 3.2) (layers *.Cu *.Mask))
+    (pad 1 smd rect (at 3.55 0) (size 2.55 2.5) (layers B.Cu B.Paste B.Mask)
+      (net {{colnetnum}} {{colnetname}}))
+    (pad "" np_thru_hole circle (at 0 0) (size 3.2 3.2) (drill 3.2) (layers *.Cu *.Mask))
+{% endif %}
     (model ${KISYS3DMOD}/Button_Switch_Keyboard.3dshapes/SW_Cherry_MX_{{keywidth}}u_PCB.wrl
       (at (xyz 0 0 0))
       (scale (xyz 1 1 1))

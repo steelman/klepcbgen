@@ -38,6 +38,11 @@ a keyboard designed using the Keyboard Layout Editor \
     )
 
     parser.add_argument(
+        "--hotswap", dest="hotswap", action="store_true",
+        help='Generate pads for Kailh hotswap sockets'
+    )
+
+    parser.add_argument(
         "infile",
         help="A JSON file containing a keyboard layout in the KLE JSON format",
     )
@@ -50,5 +55,5 @@ a keyboard designed using the Keyboard Layout Editor \
 if __name__ == "__main__":
     arguments = parse_command_line_arguments()
     kbpcbgen = KLEPCBGenerator()
-    kbpcbgen.generate_kicadproject(arguments.infile, arguments.outname, arguments.routing, arguments.colgroup)
+    kbpcbgen.generate_kicadproject(arguments.infile, arguments.outname, arguments.routing, arguments.colgroup, arguments.hotswap)
     kbpcbgen.keyboard.print_key_info()

@@ -158,7 +158,7 @@ class KLEPCBGenerator:
         )
         self.nets = Nets()
 
-    def generate_kicadproject(self, infile, outname, do_routing, colgrouping):
+    def generate_kicadproject(self, infile, outname, do_routing, colgrouping, hotswap):
         """Generate the kicad project. Main entry point"""
 
         if not os.path.exists(outname):
@@ -167,7 +167,7 @@ class KLEPCBGenerator:
         self.read_kle_json(infile)
         self.generate_rows_and_columns(colgrouping)
         self.generate_schematic(outname)
-        self.generate_layout(outname, do_routing)
+        self.generate_layout(outname, do_routing, hotswap)
         self.generate_project(outname)
 
     def read_kle_json(self, infile):
@@ -332,7 +332,7 @@ class KLEPCBGenerator:
                 )
             )
 
-    def place_layout_components(self, do_routing):
+    def place_layout_components(self, do_routing, hotswap):
         """ Place footprint components, traces and vias """
         switch = self.jinja_env.get_template("layout/keyswitch.tpl")
         diode = self.jinja_env.get_template("layout/diode.tpl")
@@ -344,6 +344,7 @@ class KLEPCBGenerator:
         rowtpl = self.jinja_env.get_template("layout/rownetname.tpl")
         coltpl = self.jinja_env.get_template("layout/colnetname.tpl")
         tracetpl = self.jinja_env.get_template("layout/trace.tpl")
+        viatpl = self.jinja_env.get_template("layout/via.tpl")
 
         # Place keyswitches, diodes, vias and traces
         key_pitch = 19.05
@@ -359,6 +360,12 @@ class KLEPCBGenerator:
         diode_offset = [-5.8, 8.89]                         # Position of the diode 
         diode_trace_offsets = [[-5.8, 2.54], [-5.8, 7.77]]  # Start/end-points for the trace connecting the diode to the switch
         row_trace_offset = [-5.8, 9.83]     # Position of the bottom pad of the diode
+        if hotswap:
+            diode_offset = [-9.9, 8.89]
+            diode_trace_offsets = [[-9.9, 2.54], [-9.9, 7.77]]
+            row_trace_offset = [-9.9, 9.83]
+        hotswap_pad_x_offset = 3.55         # Distance between a pin and the center of a pad of hot-swap socket
+        hotswap_column_x_offset = 2         # Additional offset for the vertical traces in to go around holes
         switch_contact_x_offset = 0.55      # Small offset for the vertical traces to avoid them getting too close to pads
         switch_corner_y = 10                # Y-offset of the point where the downward trace can angle towards the next switch
         switch_top = -4.50                  # Y-offset for the top of the Dwgs rectangle in the switch template
@@ -382,6 +389,7 @@ class KLEPCBGenerator:
                     colnetnum=key.colnetnum,
                     colnetname=coltpl.render(colnum=key.col),
                     keywidth=unit_width_to_available_footprint(key.width),
+                    hotswap=hotswap,
                 )
                 + "\n"
             )
@@ -398,9 +406,35 @@ class KLEPCBGenerator:
                     diodenetname=diodetpl.render(diodenum=key.num),
                     rownetnum=key.rownetnum,
                     rownetname=rowtpl.render(rownum=key.row),
+                    hotswap=hotswap,
                 )
                 + "\n"
             )
+
+            if hotswap:
+                column_x_offset = hotswap_pad_x_offset + hotswap_column_x_offset
+                components_section = (
+                    components_section
+                    + tracetpl.render(
+                        x1=ref_x + hotswap_pad_x_offset,
+                        y1=ref_y,
+                        x2=ref_x + column_x_offset,
+                        y2=ref_y,
+                        layer="B.Cu",
+                        netnum=key.colnetnum,
+                    )
+                    + "\n"
+                )
+                components_section = (
+                    components_section
+                    + viatpl.render(
+                        x=ref_x + column_x_offset,
+                        y=ref_y,
+                        layers="F.Cu B.Cu",
+                        netnum=key.colnetnum,
+                    )
+                    + "\n"
+                )
 
             # Connect diode to switch
             components_section = (
@@ -412,6 +446,7 @@ class KLEPCBGenerator:
                     y2=ref_y + diode_trace_offsets[1][1],
                     layer="B.Cu",
                     netnum=key.diodenetnum,
+                    hotswap=hotswap,
                 )
                 + "\n"
             )
@@ -461,12 +496,17 @@ class KLEPCBGenerator:
                         bot_hole_x = key_origin_x + bot_key.x_unit * key_pitch
                         bot_hole_y = key_origin_y + bot_key.y_unit * key_pitch
 
+                        if hotswap:
+                            column_x_offset = hotswap_pad_x_offset + hotswap_column_x_offset
+                        else:
+                            column_x_offset = switch_contact_x_offset
+
                         components_section = (
                             components_section
                             + tracetpl.render(
-                                x1=top_hole_x + switch_contact_x_offset,
+                                x1=top_hole_x + column_x_offset,
                                 y1=top_hole_y,
-                                x2=top_hole_x + switch_contact_x_offset,
+                                x2=top_hole_x + column_x_offset,
                                 y2=top_hole_y + switch_corner_y,
                                 layer="F.Cu",
                                 netnum=top_key.colnetnum,
@@ -474,7 +514,7 @@ class KLEPCBGenerator:
                             + "\n"
                         )
 
-                        to_x = top_hole_x + switch_contact_x_offset
+                        to_x = top_hole_x + column_x_offset
                         if to_x > bot_hole_x + switch_right:
                             to_x = bot_hole_x + switch_right
                         elif to_x < bot_hole_x + switch_left:
@@ -483,7 +523,7 @@ class KLEPCBGenerator:
                         components_section = (
                             components_section
                             + tracetpl.render(
-                                x1=bot_hole_x + switch_contact_x_offset,
+                                x1=bot_hole_x + column_x_offset,
                                 y1=bot_hole_y,
                                 x2=to_x,
                                 y2=bot_hole_y + switch_top,
@@ -501,7 +541,7 @@ class KLEPCBGenerator:
                         components_section = (
                             components_section
                             + tracetpl.render(
-                                x1=top_hole_x + switch_contact_x_offset,
+                                x1=top_hole_x + column_x_offset,
                                 y1=top_hole_y + switch_corner_y,
                                 x2=to_x,
                                 y2=top_hole_y + switch_bottom,
@@ -588,7 +628,7 @@ class KLEPCBGenerator:
 
         return nets.render(netdeclarations=declarenets, addnets=addnets)
 
-    def generate_layout(self, outname, do_routing):
+    def generate_layout(self, outname, do_routing, hotswap):
         """ Generate layout """
 
         print("Generating PCB layout ...")
@@ -596,7 +636,7 @@ class KLEPCBGenerator:
         self.define_nets()
         nets = self.create_layout_nets()
 
-        components, numcomponents = self.place_layout_components(do_routing)
+        components, numcomponents = self.place_layout_components(do_routing, hotswap)
 
         layout = self.jinja_env.get_template("layout/layout.tpl")
         controlcircuit = self.jinja_env.get_template("layout/controlcircuit.tpl")
